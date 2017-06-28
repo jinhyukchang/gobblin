@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -63,6 +64,7 @@ import gobblin.data.management.copy.OwnerAndPermission;
 import gobblin.data.management.copy.PreserveAttributes;
 import gobblin.data.management.copy.recovery.RecoveryHelper;
 import gobblin.instrumented.writer.InstrumentedDataWriter;
+import gobblin.metrics.event.sla.SlaEventKeys;
 import gobblin.state.ConstructState;
 import gobblin.util.FileListUtils;
 import gobblin.util.FinalState;
@@ -211,11 +213,12 @@ public class FileAwareInputStreamDataWriter extends InstrumentedDataWriter<FileA
         os = EncryptionFactory.buildStreamCryptoProvider(encryptionConfig).encodeOutputStream(os);
       }
       try {
-
+        FileSystem defaultFS = FileSystem.get(new Configuration());
         StreamThrottler<GobblinScopeTypes> throttler =
             this.taskBroker.getSharedResource(new StreamThrottler.Factory<GobblinScopeTypes>(), new EmptyKey());
         ThrottledInputStream throttledInputStream = throttler.throttleInputStream().inputStream(inputStream)
-            .sourceURI(copyableFile.getOrigin().getPath().toUri()).targetURI(this.fs.makeQualified(writeAt).toUri()).build();
+            .sourceURI(copyableFile.getOrigin().getPath().makeQualified(defaultFS.getUri(), defaultFS.getWorkingDirectory()).toUri())
+            .targetURI(this.fs.makeQualified(writeAt).toUri()).build();
         StreamCopier copier = new StreamCopier(throttledInputStream, os).withBufferSize(this.bufferSize);
 
         if (isInstrumentationEnabled()) {

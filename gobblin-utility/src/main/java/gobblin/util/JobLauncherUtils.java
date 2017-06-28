@@ -19,6 +19,7 @@ package gobblin.util;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -98,7 +99,7 @@ public class JobLauncherUtils {
    * @param workUnits is a {@link List} containing either {@link WorkUnit}s or {@link MultiWorkUnit}s
    * @return a {@link List} of flattened {@link WorkUnit}s
    */
-  public static List<WorkUnit> flattenWorkUnits(List<WorkUnit> workUnits) {
+  public static List<WorkUnit> flattenWorkUnits(Collection<WorkUnit> workUnits) {
     List<WorkUnit> flattenedWorkUnits = Lists.newArrayList();
     for (WorkUnit workUnit : workUnits) {
       if (workUnit instanceof MultiWorkUnit) {
@@ -157,7 +158,7 @@ public class JobLauncherUtils {
 
     if (state.contains(ConfigurationKeys.ROW_LEVEL_ERR_FILE)) {
       if (state.getPropAsBoolean(ConfigurationKeys.CLEAN_ERR_DIR, ConfigurationKeys.DEFAULT_CLEAN_ERR_DIR)) {
-        Path jobErrPath = new Path(ConfigurationKeys.ROW_LEVEL_ERR_FILE);
+        Path jobErrPath = new Path(state.getProp(ConfigurationKeys.ROW_LEVEL_ERR_FILE));
         log.info("Cleaning up err directory : " + jobErrPath);
         HadoopUtils.deleteIfExists(fs, jobErrPath, true);
       }

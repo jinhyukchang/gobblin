@@ -6,6 +6,7 @@ import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 import gobblin.compaction.mapreduce.avro.*;
 import gobblin.compaction.parser.CompactionPathParser;
+import gobblin.compaction.verify.InputRecordCountHelper;
 import gobblin.configuration.ConfigurationKeys;
 import gobblin.configuration.State;
 import gobblin.dataset.Dataset;
@@ -21,6 +22,7 @@ import org.apache.avro.mapred.AvroValue;
 import org.apache.avro.mapreduce.AvroJob;
 import org.apache.commons.math3.primes.Primes;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -40,9 +42,13 @@ import java.util.Set;
 @Slf4j
 public class CompactionAvroJobConfigurator {
   protected final State state;
+
+  @Getter
   protected final FileSystem fs;
 
   // Below attributes are MR related
+  @Getter
+  protected Job configuredJob;
   @Getter
   protected final boolean shouldDeduplicate;
   @Getter
@@ -51,6 +57,8 @@ public class CompactionAvroJobConfigurator {
   protected boolean isJobCreated = false;
   @Getter
   protected Collection<Path> mapReduceInputPaths = null;
+  @Getter
+  private long fileNameRecordCount = 0;
 
   /**
    * Constructor
@@ -197,7 +205,7 @@ public class CompactionAvroJobConfigurator {
       FileInputFormat.addInputPath(job, path);
     }
 
-    String mrOutputBase = this.state.getProp(MRCompactor.COMPACTION_TMP_DEST_DIR);
+    String mrOutputBase = this.state.getProp(MRCompactor.COMPACTION_JOB_DIR);
     CompactionPathParser parser = new CompactionPathParser(this.state);
     CompactionPathParser.CompactionParserResult rst = parser.parse(dataset);
     this.mrOutputPath = concatPaths (mrOutputBase, rst.getDatasetName(), rst.getDstSubDir(), rst.getTimeString());
@@ -215,7 +223,21 @@ public class CompactionAvroJobConfigurator {
    * @return A configured map-reduce job for avro compaction
    */
   public Job createJob(FileSystemDataset dataset) throws IOException {
-    Job job = Job.getInstance(new Configuration());
+    Configuration conf = HadoopUtils.getConfFromState(state);
+
+    // Turn on mapreduce output compression by default
+    if (conf.get("mapreduce.output.fileoutputformat.compress") == null && conf.get("mapred.output.compress") == null) {
+      conf.setBoolean("mapreduce.output.fileoutputformat.compress", true);
+    }
+
+    // Disable delegation token cancellation by default
+    if (conf.get("mapreduce.job.complete.cancel.delegation.tokens") == null) {
+      conf.setBoolean("mapreduce.job.complete.cancel.delegation.tokens", false);
+    }
+
+    addJars(conf);
+    Job job = Job.getInstance(conf);
+    job.setJobName(MRCompactorJobRunner.HADOOP_JOB_NAME);
     this.configureInputAndOutputPaths(job, dataset);
     this.configureMapper(job);
     this.configureReducer(job);
@@ -227,15 +249,18 @@ public class CompactionAvroJobConfigurator {
     // Configure schema at the last step because FilesInputFormat will be used internally
     this.configureSchema(job);
     this.isJobCreated = true;
+    this.configuredJob = job;
     return job;
   }
 
-  /**
-   * Examine if a map-reduce job is already created
-   * @return true if job has been created
-   */
-  public boolean isJobCreated() {
-    return isJobCreated;
+  private void addJars(Configuration conf) throws IOException {
+    if (!state.contains(MRCompactor.COMPACTION_JARS)) {
+      return;
+    }
+    Path jarFileDir = new Path(state.getProp(MRCompactor.COMPACTION_JARS));
+    for (FileStatus status : this.fs.listStatus(jarFileDir)) {
+      DistributedCache.addFileToClassPath(status.getPath(), conf, this.fs);
+    }
   }
 
   private FileSystem getFileSystem(State state)
@@ -261,12 +286,33 @@ public class CompactionAvroJobConfigurator {
    */
   protected Collection<Path> getGranularInputPaths (Path path) throws IOException {
 
-    Set<Path> output = Sets.newHashSet();
+    boolean appendDelta = this.state.getPropAsBoolean(MRCompactor.COMPACTION_RENAME_SOURCE_DIR_ENABLED,
+            MRCompactor.DEFAULT_COMPACTION_RENAME_SOURCE_DIR_ENABLED);
+
+    Set<Path> uncompacted = Sets.newHashSet();
+    Set<Path> total = Sets.newHashSet();
+
     for (FileStatus fileStatus : FileListUtils.listFilesRecursively(fs, path)) {
-      output.add(fileStatus.getPath().getParent());
+      if (appendDelta) {
+        // use source dir suffix to identify the delta input paths
+        if (!fileStatus.getPath().getParent().toString().endsWith(MRCompactor.COMPACTION_RENAME_SOURCE_DIR_SUFFIX)) {
+          uncompacted.add(fileStatus.getPath().getParent());
+        }
+        total.add(fileStatus.getPath().getParent());
+      } else {
+        uncompacted.add(fileStatus.getPath().getParent());
+      }
     }
 
-    return output;
+    if (appendDelta) {
+      // When the output record count from mr counter doesn't match
+      // the record count from input file names, we prefer file names because
+      // it will be used to calculate the difference of count in next run.
+      this.fileNameRecordCount = new InputRecordCountHelper(this.state).calculateRecordCount (total);
+      log.info ("{} has total input record count (based on file name) {}", path, this.fileNameRecordCount);
+    }
+
+    return uncompacted;
   }
 }
 

@@ -17,15 +17,20 @@
 
 package gobblin.restli.throttling;
 
+import java.util.Map;
+
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.linkedin.restli.common.HttpStatus;
 import com.linkedin.restli.server.RestLiServiceException;
 import com.typesafe.config.Config;
 
 import gobblin.annotation.Alias;
-import gobblin.broker.SimpleScopeType;
 import gobblin.broker.iface.SharedResourcesBroker;
 import gobblin.util.limiter.CountBasedLimiter;
+import gobblin.util.limiter.broker.SharedLimiterKey;
+
+import lombok.Getter;
 
 
 /**
@@ -39,15 +44,18 @@ public class CountBasedPolicy implements ThrottlingPolicy {
   @Alias(FACTORY_ALIAS)
   public static class Factory implements ThrottlingPolicyFactory.SpecificPolicyFactory {
     @Override
-    public ThrottlingPolicy createPolicy(SharedResourcesBroker<SimpleScopeType> broker, Config config) {
+    public ThrottlingPolicy createPolicy(SharedLimiterKey key, SharedResourcesBroker<ThrottlingServerScopes> broker, Config config) {
       Preconditions.checkArgument(config.hasPath(COUNT_KEY), "Missing key " + COUNT_KEY);
       return new CountBasedPolicy(config.getLong(COUNT_KEY));
     }
   }
 
   private final CountBasedLimiter limiter;
+  @Getter
+  private final long count;
 
   public CountBasedPolicy(long count) {
+    this.count = count;
     this.limiter = new CountBasedLimiter(count);
   }
 
@@ -73,5 +81,15 @@ public class CountBasedPolicy implements ThrottlingPolicy {
       allocation.setMinRetryDelayMillis(60000);
     }
     return allocation;
+  }
+
+  @Override
+  public Map<String, String> getParameters() {
+    return ImmutableMap.of("maxPermits", Long.toString(this.count));
+  }
+
+  @Override
+  public String getDescription() {
+    return "Count based policy. Max permits: " + this.count;
   }
 }

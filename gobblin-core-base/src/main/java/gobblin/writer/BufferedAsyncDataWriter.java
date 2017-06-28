@@ -21,7 +21,6 @@ package gobblin.writer;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ExecutorService;
@@ -43,7 +42,7 @@ import gobblin.annotation.Alpha;
  * @param <D> data record type
  */
 @Alpha
-public class BufferedAsyncDataWriter<D> implements AsyncDataWriter<D> {
+public abstract class BufferedAsyncDataWriter<D> implements AsyncDataWriter<D> {
 
   private RecordProcessor<D> processor;
   private BatchAccumulator<D> accumulator;
@@ -137,7 +136,7 @@ public class BufferedAsyncDataWriter<D> implements AsyncDataWriter<D> {
      * receives the result
      */
     private WriteCallback createBatchCallback (final Batch<D> batch) {
-      return new WriteCallback() {
+      return new WriteCallback<Object>() {
         @Override
         public void onSuccess(WriteResponse writeResponse) {
           LOG.info ("Batch " + batch.getId() + " is on success with size " + batch.getCurrentSizeInByte() + " num of record " + batch.getRecords().size());

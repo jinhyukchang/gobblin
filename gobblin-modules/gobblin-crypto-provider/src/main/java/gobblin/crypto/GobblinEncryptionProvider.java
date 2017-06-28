@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 
 import gobblin.annotation.Alpha;
@@ -35,7 +36,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Alpha
-public class GobblinEncryptionProvider implements EncryptionProvider {
+public class GobblinEncryptionProvider implements CredentialStoreProvider, EncryptionProvider {
   private final static Set<String> SUPPORTED_STREAMING_ALGORITHMS =
       ImmutableSet.of("aes_rotating", EncryptionConfigParser.ENCRYPTION_TYPE_ANY);
 
@@ -71,26 +72,30 @@ public class GobblinEncryptionProvider implements EncryptionProvider {
    * @throws IllegalArgumentException If the given algorithm/parameter pair cannot be built
    */
   public StreamCodec buildStreamCryptoProvider(String algorithm, Map<String, Object> parameters) {
-    /* TODO - Ideally this would dynamically discover plugins somehow which would let us move
-     * move crypto algorithms into gobblin-modules and just keep the factory in core. (The factory
-     * would fail to build anything if the corresponding gobblin-modules aren't included).
-     */
     switch (algorithm) {
       case EncryptionConfigParser.ENCRYPTION_TYPE_ANY:
       case "aes_rotating":
-        CredentialStore cs = buildCredentialStore(parameters);
+        CredentialStore cs = CredentialStoreFactory.buildCredentialStore(parameters);
         if (cs == null) {
           throw new IllegalArgumentException("Failed to build credential store; can't instantiate AES");
         }
 
         return new RotatingAESCodec(cs);
+      case GPGCodec.TAG:
+        String password = EncryptionConfigParser.getKeystorePassword(parameters);
+        Preconditions.checkNotNull(password, "Must specify an en/decryption password for GPGCodec!");
+        return new GPGCodec(password);
+
       default:
         log.debug("Do not support encryption type {}", algorithm);
         return null;
     }
   }
 
-  private static CredentialStore buildCredentialStore(Map<String, Object> parameters) {
+  /**
+   * Build a credential store with the given parameters.
+   */
+  public CredentialStore buildCredentialStore(Map<String, Object> parameters) {
     String ks_type = EncryptionConfigParser.getKeystoreType(parameters);
     String ks_path = EncryptionConfigParser.getKeystorePath(parameters);
     String ks_password = EncryptionConfigParser.getKeystorePassword(parameters);
@@ -104,7 +109,7 @@ public class GobblinEncryptionProvider implements EncryptionProvider {
         case JsonCredentialStore.TAG:
           return new JsonCredentialStore(ks_path);
         default:
-          throw new IllegalArgumentException("Don't know how to build credstore type " + ks_type);
+          return null;
       }
     } catch (IOException e) {
       log.error("Error building credential store, returning null", e);

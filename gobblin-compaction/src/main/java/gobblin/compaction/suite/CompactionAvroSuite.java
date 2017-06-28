@@ -2,6 +2,8 @@ package gobblin.compaction.suite;
 
 import gobblin.compaction.action.CompactionCompleteAction;
 import gobblin.compaction.action.CompactionCompleteFileOperationAction;
+import gobblin.compaction.action.CompactionMarkDirectoryAction;
+import gobblin.compaction.action.CompactionHiveRegistrationAction;
 import gobblin.compaction.mapreduce.CompactionAvroJobConfigurator;
 import gobblin.compaction.verify.CompactionAuditCountVerifier;
 import gobblin.compaction.verify.CompactionThresholdVerifier;
@@ -14,14 +16,15 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.Job;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.List;
+import java.util.LinkedList;
+import java.util.ArrayList;
 
 /**
  * A type of {@link CompactionSuite} which implements all components needed for avro file compaction.
  */
 @Slf4j
 public class CompactionAvroSuite implements CompactionSuite<FileSystemDataset> {
-
   public static final String SERIALIZE_COMPACTION_FILE_PATH_NAME = "compaction-file-path-name";
   private State state;
   private CompactionAvroJobConfigurator configurator = null;
@@ -43,6 +46,7 @@ public class CompactionAvroSuite implements CompactionSuite<FileSystemDataset> {
     List<CompactionVerifier<FileSystemDataset>> list = new LinkedList<>();
     list.add(new CompactionTimeRangeVerifier(state));
     list.add(new CompactionThresholdVerifier(state));
+    list.add(new CompactionAuditCountVerifier(state));
     return list;
   }
 
@@ -53,14 +57,13 @@ public class CompactionAvroSuite implements CompactionSuite<FileSystemDataset> {
    */
   public List<CompactionVerifier<FileSystemDataset>> getMapReduceVerifiers() {
     List<CompactionVerifier<FileSystemDataset>> list = new ArrayList<>();
-    list.add(new CompactionAuditCountVerifier(state));
     return list;
   }
 
   /**
    * Serialize a dataset {@link FileSystemDataset} to a {@link State}
    * @param dataset A dataset needs serialization
-   * @param state   A state that is used to save {@param dataset}
+   * @param state   A state that is used to save {@link gobblin.dataset.Dataset}
    */
   public void save (FileSystemDataset dataset, State state) {
     state.setProp(SERIALIZE_COMPACTION_FILE_PATH_NAME, dataset.datasetURN());
@@ -95,6 +98,8 @@ public class CompactionAvroSuite implements CompactionSuite<FileSystemDataset> {
   public List<CompactionCompleteAction<FileSystemDataset>> getCompactionCompleteActions() {
     ArrayList<CompactionCompleteAction<FileSystemDataset>> array = new ArrayList<>();
     array.add(new CompactionCompleteFileOperationAction(state, configurator));
+    array.add(new CompactionHiveRegistrationAction(state));
+    array.add(new CompactionMarkDirectoryAction(state, configurator));
     return array;
   }
 
@@ -103,7 +108,7 @@ public class CompactionAvroSuite implements CompactionSuite<FileSystemDataset> {
    * work is delegated to {@link CompactionAvroJobConfigurator#createJob(FileSystemDataset)}
    *
    * @param  dataset a top level input path which contains all avro files those need to be compacted
-   * @return a map-reduce job which will compact avro files against {@param dataset}
+   * @return a map-reduce job which will compact avro files against {@link gobblin.dataset.Dataset}
    */
   public Job createJob (FileSystemDataset dataset) throws IOException {
     configurator = new CompactionAvroJobConfigurator(this.state);

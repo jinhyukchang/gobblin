@@ -50,7 +50,7 @@ import lombok.extern.slf4j.Slf4j;
 
 
 /**
- * Extends {@link CopableDataset} to represent data replication dataset based on {@link Config}
+ * Extends {@link CopyableDataset} to represent data replication dataset based on {@link Config}
  *
  * Detail logics
  * <ul>
@@ -89,9 +89,9 @@ public class ConfigBasedDataset implements CopyableDataset {
       } catch (IOException e1) {
         // ignored
       }
+    } else {
+      this.datasetURN = e.toString();
     }
-
-    this.datasetURN = e.toString();
   }
 
   @Override
@@ -201,7 +201,6 @@ public class ConfigBasedDataset implements CopyableDataset {
               copyFrom.getWatermark().get()),
           1));
     }
-
     return copyableFiles;
   }
 

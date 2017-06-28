@@ -1,17 +1,15 @@
 package gobblin.compaction.verify;
 
-import gobblin.configuration.State;
 import gobblin.dataset.Dataset;
-import lombok.AllArgsConstructor;
-
 
 /**
  * An interface which represents a generic verifier for compaction
  */
 public interface CompactionVerifier<D extends Dataset> {
    String COMPACTION_VERIFIER_PREFIX = "compaction-verifier-";
-
+   String COMPACTION_VERIFICATION_TIMEOUT_MINUTES = "compaction.verification.timeoutMinutes";
+   String COMPACTION_VERIFICATION_THREADS= "compaction.verification.threads";
    boolean verify(D dataset);
-
+   boolean isRetriable ();
    String getName();
 }

@@ -22,14 +22,20 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 
 import org.apache.hadoop.fs.Path;
 
+import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
+import com.typesafe.config.Config;
 
 import gobblin.config.common.impl.SingleLinkedListConfigKeyPath;
 import gobblin.config.store.api.ConfigKeyPath;
 import gobblin.config.store.api.ConfigStore;
+import gobblin.configuration.ConfigurationKeys;
+import gobblin.util.ConfigUtils;
 
 
 /**
@@ -50,11 +56,6 @@ public class ConfigClientUtils {
   public static ConfigKeyPath buildConfigKeyPath(URI configKeyURI, ConfigStore cs) {
     checkMatchingSchemeAndAuthority(configKeyURI, cs);
     // Example store root is   etl-hdfs://eat1-nertznn01.grid.linkedin.com:9000/user/mitu/HdfsBasedConfigTest
-
-    // configKeyURI is etl-hdfs:///datasets/a1/a2
-    if (configKeyURI.getAuthority() == null) {
-      return getConfigKeyPath(configKeyURI.getPath());
-    }
     URI relative = cs.getStoreURI().relativize(configKeyURI);
     return getConfigKeyPath(relative.getPath());
   }
@@ -189,5 +190,20 @@ public class ConfigClientUtils {
       return false;
 
     return isAncestorOrSame(descendant.getParent(), ancestor);
+  }
+
+  public static Optional<Config> getOptionalRuntimeConfig(Properties properties) {
+    Properties runtimeConfigProps = new Properties();
+    for (Map.Entry<Object, Object> entry : properties.entrySet()) {
+      if (entry.getKey().toString().startsWith(ConfigurationKeys.CONFIG_RUNTIME_PREFIX)) {
+        runtimeConfigProps.put(entry.getKey().toString().replace(ConfigurationKeys.CONFIG_RUNTIME_PREFIX, ""),
+            entry.getValue().toString());
+      }
+    }
+    if (runtimeConfigProps.size() == 0) {
+      return Optional.<Config>absent();
+    }
+    Config config = ConfigUtils.propertiesToConfig(runtimeConfigProps);
+    return Optional.fromNullable(config);
   }
 }

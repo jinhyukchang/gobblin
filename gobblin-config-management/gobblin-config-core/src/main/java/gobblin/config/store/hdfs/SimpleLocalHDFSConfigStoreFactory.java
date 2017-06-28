@@ -17,16 +17,31 @@
 
 package gobblin.config.store.hdfs;
 
+import java.io.IOException;
+import java.net.URI;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+
+import com.google.common.base.Optional;
+import com.typesafe.config.Config;
 
 
 /**
- * Extension of {@link SimpleHDFSConfigStoreFactory} that creates a {@link SimpleHDFSConfigStore} which works for the
+ * Extension of {@link SimpleHDFSConfigStoreFactory} that creates a {@link SimpleHadoopFilesystemConfigStore} which works for the
  * local file system.
  */
-public class SimpleLocalHDFSConfigStoreFactory extends SimpleHDFSConfigStoreFactory {
+public class SimpleLocalHDFSConfigStoreFactory extends SimpleHadoopFilesystemConfigStoreFactory {
 
   private static final String LOCAL_HDFS_SCHEME_NAME = "file";
+
+  public SimpleLocalHDFSConfigStoreFactory() {
+  }
+
+  public SimpleLocalHDFSConfigStoreFactory(Config factoryConfig) {
+    super(factoryConfig);
+  }
 
   @Override
   protected String getPhysicalScheme() {
@@ -34,7 +49,23 @@ public class SimpleLocalHDFSConfigStoreFactory extends SimpleHDFSConfigStoreFact
   }
 
   @Override
-  protected Path getDefaultRootDir() {
-    return new Path(System.getProperty("user.dir"));
+  protected FileSystem getDefaultStoreFs(Config factoryConfig, Optional<URI> configDefinedDefaultURI) {
+    try {
+      return FileSystem.getLocal(new Configuration());
+    } catch (IOException ioe) {
+      throw new RuntimeException(ioe);
+    }
+  }
+
+  @Override
+  protected URI getDefaultRootDir(Config factoryConfig, FileSystem defaultFileSystem,
+      Optional<URI> configDefinedDefaultURI) {
+    // Return null because lack of authority does not indicate that a default root directory should be used
+    return null;
+  }
+
+  @Override
+  protected boolean isAuthorityRequired() {
+    return false;
   }
 }

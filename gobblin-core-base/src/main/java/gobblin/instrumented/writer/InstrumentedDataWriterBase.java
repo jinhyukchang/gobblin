@@ -113,7 +113,7 @@ abstract class InstrumentedDataWriterBase<D> implements DataWriter<D>, Instrumen
       this.failedWritesMeter = Optional.of(this.metricContext.meter(MetricNames.DataWriterMetrics.FAILED_WRITES_METER));
       setRecordsWrittenMeter(isInstrumentationEnabled());
       setBytesWrittenMeter(isInstrumentationEnabled());
-      this.dataWriterTimer = Optional.of(this.metricContext.timer(MetricNames.DataWriterMetrics.WRITE_TIMER));
+      this.dataWriterTimer = Optional.<Timer>of(this.metricContext.timer(MetricNames.DataWriterMetrics.WRITE_TIMER));
     } else {
       this.recordsInMeter = Optional.absent();
       this.successfulWritesMeter = Optional.absent();
@@ -211,9 +211,12 @@ abstract class InstrumentedDataWriterBase<D> implements DataWriter<D>, Instrumen
 
   @Override
   public void close() throws IOException {
-    this.closer.close();
-    if (this.writerMetricsUpdater.isPresent()) {
-      ExecutorsUtils.shutdownExecutorService(this.writerMetricsUpdater.get(), Optional.of(log));
+    try {
+      this.closer.close();
+    } finally {
+      if (this.writerMetricsUpdater.isPresent()) {
+        ExecutorsUtils.shutdownExecutorService(this.writerMetricsUpdater.get(), Optional.of(log));
+      }
     }
   }
 

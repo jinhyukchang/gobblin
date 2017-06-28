@@ -104,6 +104,12 @@ public class SharedResourcesBrokerImpl<S extends ScopeType<S>> implements Shared
     }
   }
 
+  @Override
+  public <T, K extends SharedResourceKey> void bindSharedResourceAtScope(SharedResourceFactory<T, K, S> factory,
+      K key, S scopeType, T instance) throws NoSuchScopeException {
+    this.brokerCache.put(factory, key, getWrappedScope(scopeType), instance);
+  }
+
   /**
    * Get a {@link gobblin.broker.iface.ConfigView} for the input scope, key, and factory.
    */
@@ -114,8 +120,9 @@ public class SharedResourcesBrokerImpl<S extends ScopeType<S>> implements Shared
       if (scopedConfig.getScopeType().equals(scopedConfig.getScopeType().rootScope())) {
         config = ConfigUtils.getConfigOrEmpty(scopedConfig.getConfig(), factoryName).withFallback(config);
       } else if (scope != null && SharedResourcesBrokerUtils.isScopeTypeAncestor(scope, scopedConfig.getScopeType())) {
-        config = ConfigUtils.getConfigOrEmpty(scopedConfig.getConfig(), factoryName).getConfig(scope.name())
-            .atKey(scope.name()).withFallback(config);
+        Config tmpConfig = ConfigUtils.getConfigOrEmpty(scopedConfig.getConfig(), factoryName);
+        tmpConfig = ConfigUtils.getConfigOrEmpty(tmpConfig, scope.name());
+        config = tmpConfig.atKey(scope.name()).withFallback(config);
       }
     }
 
